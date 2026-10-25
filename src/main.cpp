@@ -15,8 +15,16 @@
  * - Battery Pin 6: Enable (must be HIGH during communication)
  *
  * MODES:
- * - Build with -DENABLE_WEB_SERVER=1 for standalone web interface
  * - Default build provides serial bridge compatible with Python GUI
+ * - Build with -DENABLE_WEB_SERVER=1 for standalone web interface (Default is 1)
+ * - Build with -DENABLE_LED_STATUS for using the LED as a wifi mode indicator (Default)
+ *     Flashing: Trying to connect to a WiFi network
+ *          Off: Connected to a predefined network
+ *        Solid: Created a standalone AP
+ *
+ *   LED feature size:
+ *      RAM: 8 bytes 
+ *    Flash: 288 bytes
  *
  * PROTOCOL (Serial Bridge):
  * Request:  [0x01][data_len][rsp_len][cmd][data...]
@@ -28,8 +36,22 @@
 #include <Arduino.h>
 #include "OneWire2.h"
 
-#define HOSTNAME "obi-esp32" // Hostname of device. Will also be the WIFI name if not overridden in secrets.h.
+#define HOSTNAME "obi-esp32" // Hostname of device. Will also be the WIFI name if not overridden.
 
+// Pin definitions (can be overridden via build flags)
+#ifndef ONEWIRE_PIN
+    #define ONEWIRE_PIN 3
+#endif
+
+#ifndef ENABLE_PIN
+    #define ENABLE_PIN 4
+#endif
+
+#ifdef ENABLE_LED_STATUS
+    #ifndef LED_PIN
+        #define LED_PIN 8
+    #endif
+#endif
 
 #ifdef ENABLE_WEB_SERVER
     #include <WiFi.h>
@@ -54,13 +76,13 @@
 #define OBI_VERSION_MINOR 0
 #define OBI_VERSION_PATCH 0
 
-// Pin definitions (can be overridden via build flags)
-#ifndef ONEWIRE_PIN
-    #define ONEWIRE_PIN 3
-#endif
-
-#ifndef ENABLE_PIN
-    #define ENABLE_PIN 4
+#ifdef ENABLE_LED_STATUS
+    #pragma message "LED status ENABLED"
+    // LED status variables:
+    bool LED_Off = true;
+    bool LED_flash = true;
+    const unsigned long LED_INTERVAL = 500; // Time in milliseconds (0.5 seconds)
+    unsigned long flashMillis = 0; // Stores last time LED was flashed
 #endif
 
 // Nibble swap helper
@@ -111,6 +133,13 @@ bool readBatteryModel();
     void setupWiFi();
 #endif
 
+#ifdef ENABLE_LED_STATUS
+    void setLED(bool high);
+    void toggleLED();
+    void flashLED();
+    void quickflashLED(int count) ;
+#endif
+
 // ------------------------------------------------------------------
 // Setup
 // ------------------------------------------------------------------
@@ -125,6 +154,10 @@ void setup() {
     // Configure pins
     pinMode(ENABLE_PIN, OUTPUT);
     digitalWrite(ENABLE_PIN, LOW);
+    #ifdef ENABLE_LED_STATUS
+        pinMode(LED_PIN, OUTPUT);
+        digitalWrite(LED_PIN, HIGH); // HIGH output means LED is off
+    #endif
     
     // Initialise battery data
     memset(&batteryData, 0, sizeof(batteryData));
@@ -136,10 +169,17 @@ void setup() {
     Serial.printf("OneWire Pin: GPIO%d\n", ONEWIRE_PIN);
     Serial.printf("Enable Pin: GPIO%d\n", ENABLE_PIN);
 
+
+    #ifdef ENABLE_LED_STATUS
+        quickflashLED(4); // Quick Flash LED 5 time during startup
+    #endif
+
     #ifdef ENABLE_WEB_SERVER
         Serial.println("Mode: Web Server + Serial Bridge");
         setupWiFi();
-
+        #ifdef ENABLE_LED_STATUS
+            quickflashLED(2); // Quick Flash LED 2 times after Wifi setup
+        #endif
         if (WiFi.status() == WL_CONNECTED) {
             setupOTA();
         }
@@ -164,7 +204,42 @@ void loop() {
         server.handleClient();
     #endif
     processSerialCommand();
+    #ifdef ENABLE_LED_STATUS
+        if (LED_flash) {
+            flashLED();
+        }
+    #endif
 }
+
+// ------------------------------------------------------------------
+// LED control
+// ------------------------------------------------------------------
+#ifdef ENABLE_LED_STATUS
+    void setLED(bool high) {
+        digitalWrite(LED_PIN, high ? LOW : HIGH);
+        LED_Off = high;
+        LED_flash = false;
+    }
+    void toggleLED() {
+        digitalWrite(LED_PIN, LED_Off ? HIGH : LOW);
+        LED_Off = not(LED_Off);
+    }
+
+    void flashLED() {
+        unsigned long currentMillis = millis(); // Get the current time
+        if (currentMillis - flashMillis >= LED_INTERVAL) {
+            flashMillis = currentMillis; // Save the last time we toggled
+            toggleLED();
+        }
+    }
+    void quickflashLED(int count) {
+        for (int i = 0; i < count*2; i++) {
+            toggleLED();
+            delay(250);
+        }
+        delay(500);
+    }
+#endif
 
 // ------------------------------------------------------------------
 // WiFi Setup - multi-network with hotspot fallback
@@ -202,6 +277,9 @@ void loop() {
 
                 unsigned long startMs = millis();
                 while (WiFi.status() != WL_CONNECTED && millis() - startMs < WIFI_TIMEOUT_MS) {
+                    #ifdef ENABLE_LED_STATUS
+                        toggleLED();
+                    #endif
                     delay(500);
                     Serial.print(".");
                 }
@@ -217,6 +295,9 @@ void loop() {
             if (MDNS.begin(HOSTNAME)) {
                 Serial.printf("mDNS started - http://%s.local\n", HOSTNAME);
             }
+            #ifdef ENABLE_LED_STATUS
+                setLED(false);
+            #endif
 
         } else {
             // No known network found or connection timed out — start hotspot
@@ -229,6 +310,9 @@ void loop() {
             } else {
                 apStarted = WiFi.softAP(HOTSPOT_SSID);
             }
+            #ifdef ENABLE_LED_STATUS
+                setLED(true);
+            #endif
 
             if (apStarted) {
                 // Start DNS server - redirect all DNS queries to our IP
