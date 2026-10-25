@@ -28,22 +28,25 @@
 #include <Arduino.h>
 #include "OneWire2.h"
 
+#define HOSTNAME "obi-esp32" // Hostname of device. Will also be the WIFI name if not overridden in secrets.h.
+
+
 #ifdef ENABLE_WEB_SERVER
-#include <WiFi.h>
-#include <WebServer.h>
-#include <ArduinoJson.h>
-#include <ArduinoOTA.h>
-#include <ESPmDNS.h>
-#include <DNSServer.h>
-#include "web_interface.h"
-#if __has_include("secrets.h")
-#include "secrets.h"
-#ifdef WIFI_NETWORKS_DEFINED
-#pragma message "secrets.h loaded OK"
-#else
-#pragma message "secrets.h NOT found - will use hotspot"
-#endif
-#endif
+    #include <WiFi.h>
+    #include <WebServer.h>
+    #include <ArduinoJson.h>
+    #include <ArduinoOTA.h>
+    #include <ESPmDNS.h>
+    #include <DNSServer.h>
+    #include "web_interface.h"
+    #if __has_include("secrets.h")
+        #include "secrets.h"
+        #ifdef WIFI_NETWORKS_DEFINED
+            #pragma message "secrets.h loaded OK"
+        #else
+            #pragma message "secrets.h NOT found - will use hotspot"
+        #endif
+    #endif
 #endif
 
 // Version
@@ -53,11 +56,11 @@
 
 // Pin definitions (can be overridden via build flags)
 #ifndef ONEWIRE_PIN
-#define ONEWIRE_PIN 3
+    #define ONEWIRE_PIN 3
 #endif
 
 #ifndef ENABLE_PIN
-#define ENABLE_PIN 4
+    #define ENABLE_PIN 4
 #endif
 
 // Nibble swap helper
@@ -67,9 +70,9 @@
 OneWire<ONEWIRE_PIN> makita;
 
 #ifdef ENABLE_WEB_SERVER
-WebServer server(80);
-DNSServer dnsServer;
-bool wifiHotspot = false;  // true if running in hotspot/AP mode
+    WebServer server(80);
+    DNSServer dnsServer;
+    bool wifiHotspot = false;  // true if running in hotspot/AP mode
 #endif
 
 // Battery data structure
@@ -103,9 +106,9 @@ bool readBatteryVoltages();
 bool readBatteryModel();
 
 #ifdef ENABLE_WEB_SERVER
-void setupWebServer();
-void setupOTA();
-void setupWiFi();
+    void setupWebServer();
+    void setupOTA();
+    void setupWiFi();
 #endif
 
 // ------------------------------------------------------------------
@@ -122,7 +125,7 @@ void setup() {
     // Configure pins
     pinMode(ENABLE_PIN, OUTPUT);
     digitalWrite(ENABLE_PIN, LOW);
-
+    
     // Initialise battery data
     memset(&batteryData, 0, sizeof(batteryData));
 
@@ -133,17 +136,17 @@ void setup() {
     Serial.printf("OneWire Pin: GPIO%d\n", ONEWIRE_PIN);
     Serial.printf("Enable Pin: GPIO%d\n", ENABLE_PIN);
 
-#ifdef ENABLE_WEB_SERVER
-    Serial.println("Mode: Web Server + Serial Bridge");
-    setupWiFi();
+    #ifdef ENABLE_WEB_SERVER
+        Serial.println("Mode: Web Server + Serial Bridge");
+        setupWiFi();
 
-    if (WiFi.status() == WL_CONNECTED) {
-        setupOTA();
-    }
-    setupWebServer();
-#else
-    Serial.println("Mode: Serial Bridge Only");
-#endif
+        if (WiFi.status() == WL_CONNECTED) {
+            setupOTA();
+        }
+        setupWebServer();
+    #else
+        Serial.println("Mode: Serial Bridge Only");
+    #endif
 
     Serial.println("Ready.");
 }
@@ -152,14 +155,14 @@ void setup() {
 // Main Loop
 // ------------------------------------------------------------------
 void loop() {
-#ifdef ENABLE_WEB_SERVER
-    if (wifiHotspot) {
-        dnsServer.processNextRequest();
-    } else {
-        ArduinoOTA.handle();
-    }
-    server.handleClient();
-#endif
+    #ifdef ENABLE_WEB_SERVER
+        if (wifiHotspot) {
+            dnsServer.processNextRequest();
+        } else {
+            ArduinoOTA.handle();
+        }
+        server.handleClient();
+    #endif
     processSerialCommand();
 }
 
@@ -167,85 +170,85 @@ void loop() {
 // WiFi Setup - multi-network with hotspot fallback
 // ------------------------------------------------------------------
 #ifdef ENABLE_WEB_SERVER
-void setupWiFi() {
+    void setupWiFi() {
 
-#ifdef WIFI_NETWORKS_DEFINED
-    // Scan for available networks
-    Serial.println("Scanning for WiFi networks...");
-    int found = WiFi.scanNetworks();
-    Serial.printf("Found %d networks\n", found);
+        #ifdef WIFI_NETWORKS_DEFINED
+            // Scan for available networks
+            Serial.println("Scanning for WiFi networks...");
+            int found = WiFi.scanNetworks();
+            Serial.printf("Found %d networks\n", found);
 
-    // Try to match a known network from secrets.h
-    const char* matchedSSID = nullptr;
-    const char* matchedPass = nullptr;
+            // Try to match a known network from secrets.h
+            const char* matchedSSID = nullptr;
+            const char* matchedPass = nullptr;
 
-    for (int i = 0; i < found && matchedSSID == nullptr; i++) {
-        String scannedSSID = WiFi.SSID(i);
-        for (int j = 0; j < WIFI_NETWORK_COUNT; j++) {
-            if (scannedSSID == WIFI_NETWORKS[j].ssid) {
-                matchedSSID = WIFI_NETWORKS[j].ssid;
-                matchedPass = WIFI_NETWORKS[j].pass;
-                Serial.printf("Matched network: %s\n", matchedSSID);
-                break;
+            for (int i = 0; i < found && matchedSSID == nullptr; i++) {
+                String scannedSSID = WiFi.SSID(i);
+                for (int j = 0; j < WIFI_NETWORK_COUNT; j++) {
+                    if (scannedSSID == WIFI_NETWORKS[j].ssid) {
+                        matchedSSID = WIFI_NETWORKS[j].ssid;
+                        matchedPass = WIFI_NETWORKS[j].pass;
+                        Serial.printf("Matched network: %s\n", matchedSSID);
+                        break;
+                    }
+                }
             }
-        }
-    }
-    WiFi.scanDelete();
+            WiFi.scanDelete();
 
-    if (matchedSSID != nullptr) {
-        // Connect to matched network
-        Serial.printf("Connecting to %s", matchedSSID);
-        WiFi.begin(matchedSSID, matchedPass);
+            if (matchedSSID != nullptr) {
+                // Connect to matched network
+                Serial.printf("Connecting to %s", matchedSSID);
+                WiFi.begin(matchedSSID, matchedPass);
 
-        unsigned long startMs = millis();
-        while (WiFi.status() != WL_CONNECTED && millis() - startMs < WIFI_TIMEOUT_MS) {
-            delay(500);
-            Serial.print(".");
-        }
-        Serial.println();
-    }
-#endif
+                unsigned long startMs = millis();
+                while (WiFi.status() != WL_CONNECTED && millis() - startMs < WIFI_TIMEOUT_MS) {
+                    delay(500);
+                    Serial.print(".");
+                }
+                Serial.println();
+            }
+        #endif
 
-    if (WiFi.status() == WL_CONNECTED) {
-        wifiHotspot = false;
-        Serial.print("Connected! IP: ");
-        Serial.println(WiFi.localIP());
+        if (WiFi.status() == WL_CONNECTED) {
+            wifiHotspot = false;
+            Serial.print("Connected! IP: ");
+            Serial.println(WiFi.localIP());
 
-        if (MDNS.begin("obi-esp32")) {
-            Serial.println("mDNS started - http://obi-esp32.local");
-        }
+            if (MDNS.begin(HOSTNAME)) {
+                Serial.printf("mDNS started - http://%s.local\n", HOSTNAME);
+            }
 
-    } else {
-        // No known network found or connection timed out — start hotspot
-        wifiHotspot = true;
-        WiFi.mode(WIFI_AP);
-
-        bool apStarted;
-        if (strlen(HOTSPOT_PASS) > 0) {
-            apStarted = WiFi.softAP(HOTSPOT_SSID, HOTSPOT_PASS);
         } else {
-            apStarted = WiFi.softAP(HOTSPOT_SSID);
-        }
+            // No known network found or connection timed out — start hotspot
+            wifiHotspot = true;
+            WiFi.mode(WIFI_AP);
 
-        if (apStarted) {
-            // Start DNS server - redirect all DNS queries to our IP
-            // This triggers the captive portal on Android, iOS, Windows, macOS
-            dnsServer.start(53, "*", WiFi.softAPIP());
-
-            Serial.printf("Hotspot started - SSID: %s\n", HOTSPOT_SSID);
+            bool apStarted;
             if (strlen(HOTSPOT_PASS) > 0) {
-                Serial.printf("Hotspot password: %s\n", HOTSPOT_PASS);
+                apStarted = WiFi.softAP(HOTSPOT_SSID, HOTSPOT_PASS);
             } else {
-                Serial.println("Hotspot is open (no password)");
+                apStarted = WiFi.softAP(HOTSPOT_SSID);
             }
-            Serial.print("Hotspot IP: ");
-            Serial.println(WiFi.softAPIP());
-            Serial.println("Captive portal active - browser should open automatically");
-        } else {
-            Serial.println("ERROR: Failed to start hotspot");
+
+            if (apStarted) {
+                // Start DNS server - redirect all DNS queries to our IP
+                // This triggers the captive portal on Android, iOS, Windows, macOS
+                dnsServer.start(53, "*", WiFi.softAPIP());
+
+                Serial.printf("Hotspot started - SSID: %s\n", HOTSPOT_SSID);
+                if (strlen(HOTSPOT_PASS) > 0) {
+                    Serial.printf("Hotspot password: %s\n", HOTSPOT_PASS);
+                } else {
+                    Serial.println("Hotspot is open (no password)");
+                }
+                Serial.print("Hotspot IP: ");
+                Serial.println(WiFi.softAPIP());
+                Serial.println("Captive portal active - browser should open automatically");
+            } else {
+                Serial.println("ERROR: Failed to start hotspot");
+            }
         }
     }
-}
 #endif
 
 // ------------------------------------------------------------------
@@ -593,34 +596,34 @@ void processSerialCommand() {
 // ------------------------------------------------------------------
 
 #ifdef ENABLE_WEB_SERVER
-void setupOTA() {
-    ArduinoOTA.setHostname("obi-esp32");
+    void setupOTA() {
+        ArduinoOTA.setHostname(HOSTNAME);
 
-    ArduinoOTA.onStart([]() {
-        String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
-        Serial.println("OTA Start: " + type);
-    });
+        ArduinoOTA.onStart([]() {
+            String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
+            Serial.println("OTA Start: " + type);
+        });
 
-    ArduinoOTA.onEnd([]() {
-        Serial.println("\nOTA End");
-    });
+        ArduinoOTA.onEnd([]() {
+            Serial.println("\nOTA End");
+        });
 
-    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        Serial.printf("OTA Progress: %u%%\r", (progress / (total / 100)));
-    });
+        ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+            Serial.printf("OTA Progress: %u%%\r", (progress / (total / 100)));
+        });
 
-    ArduinoOTA.onError([](ota_error_t error) {
-        Serial.printf("OTA Error[%u]: ", error);
-        if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-        else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-        else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-        else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-        else if (error == OTA_END_ERROR) Serial.println("End Failed");
-    });
+        ArduinoOTA.onError([](ota_error_t error) {
+            Serial.printf("OTA Error[%u]: ", error);
+            if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+            else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+            else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+            else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+            else if (error == OTA_END_ERROR) Serial.println("End Failed");
+        });
 
-    ArduinoOTA.begin();
-    Serial.println("OTA Ready");
-}
+        ArduinoOTA.begin();
+        Serial.println("OTA Ready");
+    }
 #endif
 
 // ------------------------------------------------------------------
@@ -628,123 +631,123 @@ void setupOTA() {
 // ------------------------------------------------------------------
 
 #ifdef ENABLE_WEB_SERVER
-void handleRoot() {
-    server.send_P(200, "text/html", INDEX_HTML);
-}
-
-void handleApiRead() {
-    readBatteryInfo();
-    readBatteryModel();
-    readBatteryVoltages();
-
-    JsonDocument doc;
-    doc["success"] = batteryData.valid;
-    doc["model"] = batteryData.model;
-    doc["locked"] = batteryData.locked;
-    doc["chargeCount"] = batteryData.chargeCount;
-    doc["mfgDate"] = batteryData.mfgDate;
-    doc["capacity"] = batteryData.capacity;
-    doc["errorCode"] = batteryData.errorCode;
-    doc["packVoltage"] = batteryData.packVoltage;
-    doc["cell1"] = batteryData.cellVoltage[0];
-    doc["cell2"] = batteryData.cellVoltage[1];
-    doc["cell3"] = batteryData.cellVoltage[2];
-    doc["cell4"] = batteryData.cellVoltage[3];
-    doc["cell5"] = batteryData.cellVoltage[4];
-    doc["cellDiff"] = batteryData.cellDiff;
-    doc["tempCell"] = batteryData.tempCell;
-    doc["tempMosfet"] = batteryData.tempMosfet;
-
-    String response;
-    serializeJson(doc, response);
-    server.send(200, "application/json", response);
-}
-
-void handleApiVoltages() {
-    bool success = readBatteryVoltages();
-
-    JsonDocument doc;
-    doc["success"] = success;
-    doc["packVoltage"] = batteryData.packVoltage;
-    doc["cell1"] = batteryData.cellVoltage[0];
-    doc["cell2"] = batteryData.cellVoltage[1];
-    doc["cell3"] = batteryData.cellVoltage[2];
-    doc["cell4"] = batteryData.cellVoltage[3];
-    doc["cell5"] = batteryData.cellVoltage[4];
-    doc["cellDiff"] = batteryData.cellDiff;
-    doc["tempCell"] = batteryData.tempCell;
-    doc["tempMosfet"] = batteryData.tempMosfet;
-
-    String response;
-    serializeJson(doc, response);
-    server.send(200, "application/json", response);
-}
-
-void handleApiLeds() {
-    bool state = server.hasArg("state") && server.arg("state") == "1";
-
-    setEnable(true);
-    delay(400);
-
-    byte cmd1[] = {0xD9, 0x96, 0xA5};
-    byte rsp[32];
-    cmdAndRead33(cmd1, 3, rsp, 9);
-
-    byte cmd2[] = {0xDA, (byte)(state ? 0x31 : 0x34)};
-    cmdAndRead33(cmd2, 2, rsp, 9);
-
-    setEnable(false);
-
-    server.send(200, "application/json", "{\"success\":true}");
-}
-
-void handleApiReset() {
-    setEnable(true);
-    delay(400);
-
-    byte cmd1[] = {0xD9, 0x96, 0xA5};
-    byte rsp[32];
-    cmdAndRead33(cmd1, 3, rsp, 9);
-
-    byte cmd2[] = {0xDA, 0x04};
-    cmdAndRead33(cmd2, 2, rsp, 9);
-
-    setEnable(false);
-
-    server.send(200, "application/json", "{\"success\":true}");
-}
-
-void handleCaptivePortal() {
-    // Redirect to root - works for all captive portal detection methods
-    server.sendHeader("Location", "http://192.168.4.1/", true);
-    server.send(302, "text/plain", "");
-}
-
-void setupWebServer() {
-    server.on("/", HTTP_GET, handleRoot);
-    server.on("/api/read", HTTP_GET, handleApiRead);
-    server.on("/api/voltages", HTTP_GET, handleApiVoltages);
-    server.on("/api/leds", HTTP_GET, handleApiLeds);
-    server.on("/api/reset", HTTP_GET, handleApiReset);
-
-    if (wifiHotspot) {
-        // Captive portal detection endpoints for each OS
-        server.on("/generate_204", HTTP_GET, handleCaptivePortal);           // Android
-        server.on("/gen_204", HTTP_GET, handleCaptivePortal);                // Android fallback
-        server.on("/hotspot-detect.html", HTTP_GET, handleCaptivePortal);   // iOS / macOS
-        server.on("/connecttest.txt", HTTP_GET, handleCaptivePortal);        // Windows
-        server.on("/redirect", HTTP_GET, handleCaptivePortal);               // Windows fallback
-        server.on("/success.txt", HTTP_GET, handleCaptivePortal);            // Firefox
-        server.onNotFound(handleCaptivePortal);  // Catch-all for any other probe URLs
+    void handleRoot() {
+        server.send_P(200, "text/html", INDEX_HTML);
     }
 
-    server.begin();
-    Serial.println("Web server started on port 80");
+    void handleApiRead() {
+        readBatteryInfo();
+        readBatteryModel();
+        readBatteryVoltages();
 
-    if (wifiHotspot) {
-        Serial.printf("Connect to hotspot '%s' then browse to http://192.168.4.1\n", HOTSPOT_SSID);
-    } else {
-        Serial.println("Browse to http://obi-esp32.local");
+        JsonDocument doc;
+        doc["success"] = batteryData.valid;
+        doc["model"] = batteryData.model;
+        doc["locked"] = batteryData.locked;
+        doc["chargeCount"] = batteryData.chargeCount;
+        doc["mfgDate"] = batteryData.mfgDate;
+        doc["capacity"] = batteryData.capacity;
+        doc["errorCode"] = batteryData.errorCode;
+        doc["packVoltage"] = batteryData.packVoltage;
+        doc["cell1"] = batteryData.cellVoltage[0];
+        doc["cell2"] = batteryData.cellVoltage[1];
+        doc["cell3"] = batteryData.cellVoltage[2];
+        doc["cell4"] = batteryData.cellVoltage[3];
+        doc["cell5"] = batteryData.cellVoltage[4];
+        doc["cellDiff"] = batteryData.cellDiff;
+        doc["tempCell"] = batteryData.tempCell;
+        doc["tempMosfet"] = batteryData.tempMosfet;
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
     }
-}
+
+    void handleApiVoltages() {
+        bool success = readBatteryVoltages();
+
+        JsonDocument doc;
+        doc["success"] = success;
+        doc["packVoltage"] = batteryData.packVoltage;
+        doc["cell1"] = batteryData.cellVoltage[0];
+        doc["cell2"] = batteryData.cellVoltage[1];
+        doc["cell3"] = batteryData.cellVoltage[2];
+        doc["cell4"] = batteryData.cellVoltage[3];
+        doc["cell5"] = batteryData.cellVoltage[4];
+        doc["cellDiff"] = batteryData.cellDiff;
+        doc["tempCell"] = batteryData.tempCell;
+        doc["tempMosfet"] = batteryData.tempMosfet;
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
+    }
+
+    void handleApiLeds() {
+        bool state = server.hasArg("state") && server.arg("state") == "1";
+
+        setEnable(true);
+        delay(400);
+
+        byte cmd1[] = {0xD9, 0x96, 0xA5};
+        byte rsp[32];
+        cmdAndRead33(cmd1, 3, rsp, 9);
+
+        byte cmd2[] = {0xDA, (byte)(state ? 0x31 : 0x34)};
+        cmdAndRead33(cmd2, 2, rsp, 9);
+
+        setEnable(false);
+
+        server.send(200, "application/json", "{\"success\":true}");
+    }
+
+    void handleApiReset() {
+        setEnable(true);
+        delay(400);
+
+        byte cmd1[] = {0xD9, 0x96, 0xA5};
+        byte rsp[32];
+        cmdAndRead33(cmd1, 3, rsp, 9);
+
+        byte cmd2[] = {0xDA, 0x04};
+        cmdAndRead33(cmd2, 2, rsp, 9);
+
+        setEnable(false);
+
+        server.send(200, "application/json", "{\"success\":true}");
+    }
+
+    void handleCaptivePortal() {
+        // Redirect to root - works for all captive portal detection methods
+        server.sendHeader("Location", "http://192.168.4.1/", true);
+        server.send(302, "text/plain", "");
+    }
+
+    void setupWebServer() {
+        server.on("/", HTTP_GET, handleRoot);
+        server.on("/api/read", HTTP_GET, handleApiRead);
+        server.on("/api/voltages", HTTP_GET, handleApiVoltages);
+        server.on("/api/leds", HTTP_GET, handleApiLeds);
+        server.on("/api/reset", HTTP_GET, handleApiReset);
+
+        if (wifiHotspot) {
+            // Captive portal detection endpoints for each OS
+            server.on("/generate_204", HTTP_GET, handleCaptivePortal);           // Android
+            server.on("/gen_204", HTTP_GET, handleCaptivePortal);                // Android fallback
+            server.on("/hotspot-detect.html", HTTP_GET, handleCaptivePortal);   // iOS / macOS
+            server.on("/connecttest.txt", HTTP_GET, handleCaptivePortal);        // Windows
+            server.on("/redirect", HTTP_GET, handleCaptivePortal);               // Windows fallback
+            server.on("/success.txt", HTTP_GET, handleCaptivePortal);            // Firefox
+            server.onNotFound(handleCaptivePortal);  // Catch-all for any other probe URLs
+        }
+
+        server.begin();
+        Serial.println("Web server started on port 80");
+
+        if (wifiHotspot) {
+            Serial.printf("Connect to hotspot '%s' then browse to http://192.168.4.1\n", HOTSPOT_SSID);
+        } else {
+            Serial.printf("Browse to http://%s.local\n", HOTSPOT_SSID);
+        }
+    }
 #endif
